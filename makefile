@@ -1,2 +1,2 @@
-main: main.c
-	gcc main.c requests.c -o main
+http: main.c
+	gcc main.c requests.c -o http

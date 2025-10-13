@@ -2,11 +2,11 @@
 #define REQUESTS_H
 #include <stdio.h>
 
-void readFile(FILE* file, char* buffer);
+int readFile(FILE* file, int chunked, int size, int socket);
 
-void parseRequest(char* request, char* response);
+int parseRequest(char* request, char* response, int pathsize);
 
-void getMIMEType(char* filename, char* request);
+char* getMIMEType(char* filename);
 
-void makeHeader(char* response, char* filetype);
+void makeHeader(int socket, char* filetype, long size);
 #endif

@@ -3,15 +3,15 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdlib.h>
 #include "requests.h"
 
 #define PORT 6767
-#define MAX_BUFFER 2048
+#define MAX_BUFFER 8192
 
 int main() {
 	printf("Hello world!\n");
 	FILE* file = fopen("index.html", "r");
-
 	char buffer[MAX_BUFFER];
 	char response[MAX_BUFFER]; 
 
@@ -35,12 +35,15 @@ int main() {
 		struct sockaddr_in newAddr;
 		socklen_t newAddrSize = sizeof(newAddr);
 		int newSocket = accept(mySocket, (struct sockaddr*) &newAddr, &newAddrSize);
+		char filepath[64];
+		FILE* file;
+		long filesize;
 		if (newSocket < 0) {
 			perror("error accepting new socket\n");
 			continue;
 		}
 		printf("new connection!\n");
-		int newRead = read(newSocket, buffer, MAX_BUFFER);
+		int newRead = read(newSocket, buffer, MAX_BUFFER - 1);
 		if (newRead < 0) {
 			perror("read failed\n");
 			return -1;
@@ -48,12 +51,40 @@ int main() {
 			buffer[newRead] = '\0';
 			fputs(buffer, stdout);
 		} 
-		parseRequest(buffer, response);
-		fputs(response, stdout);
-		int newWrite = write(newSocket, response, strlen(response));
-		if (newWrite < 0) {
-			printf("write failed\n");
-			return -1;
+		switch (parseRequest(buffer, filepath, 64)) {
+			case 0:
+				file = fopen("index.html", "rb");
+				if (file == NULL) {
+					makeHeader(newSocket, "DNE", 0);
+				} else {
+					fseek(file, 0, SEEK_END);
+					filesize = ftell(file);
+					rewind(file);
+					makeHeader(newSocket, "HOME", filesize);
+					readFile(file, 0, filesize, newSocket);
+					fclose(file);
+				}
+				break;
+			case 1:
+				file = fopen(filepath, "rb");
+				if (file == NULL) {
+					makeHeader(newSocket, "DNE", 0);
+				} else {
+					fseek(file, 0, SEEK_END);
+					filesize = ftell(file);
+					int chunked = filesize > MAX_BUFFER;
+					rewind(file);
+					char* extension = getMIMEType(filepath);
+					makeHeader(newSocket, extension, filesize);
+					if (strcmp(extension, "DNE") != 0 && strcmp(extension, "FORBID") != 0) {
+						readFile(file, chunked, filesize, newSocket);
+					}
+					free(extension);
+					fclose(file);
+				}
+				break;
+			default:
+			break;
 		}
 		close(newSocket);
 	}
