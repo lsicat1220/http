@@ -34,6 +34,7 @@ int main() {
 	while(1) { //request loop
 		struct sockaddr_in newAddr;
 		socklen_t newAddrSize = sizeof(newAddr);
+		int keepAlive = 1;
 		int newSocket = accept(mySocket, (struct sockaddr*) &newAddr, &newAddrSize);
 		char filepath[64];
 		FILE* file;
@@ -43,48 +44,44 @@ int main() {
 			continue;
 		}
 		printf("new connection!\n");
-		int newRead = read(newSocket, buffer, MAX_BUFFER - 1);
-		if (newRead < 0) {
-			perror("read failed\n");
-			return -1;
-		} else {
-			buffer[newRead] = '\0';
-			fputs(buffer, stdout);
-		} 
-		switch (parseRequest(buffer, filepath, 64)) {
-			case 0:
-				file = fopen("index.html", "rb");
-				if (file == NULL) {
-					makeHeader(newSocket, "DNE", 0);
-				} else {
-					fseek(file, 0, SEEK_END);
-					filesize = ftell(file);
-					rewind(file);
-					makeHeader(newSocket, "HOME", filesize);
-					readFile(file, 0, filesize, newSocket);
-					fclose(file);
-				}
+		while (keepAlive) {
+			int newRead = read(newSocket, buffer, MAX_BUFFER - 1);
+			if (newRead <= 0) {
+				printf("Client disconnected\n");
 				break;
-			case 1:
-				file = fopen(filepath, "rb");
-				if (file == NULL) {
-					makeHeader(newSocket, "DNE", 0);
-				} else {
-					fseek(file, 0, SEEK_END);
-					filesize = ftell(file);
-					int chunked = filesize > MAX_BUFFER;
-					rewind(file);
-					char* extension = getMIMEType(filepath);
-					makeHeader(newSocket, extension, filesize);
-					if (strcmp(extension, "DNE") != 0 && strcmp(extension, "FORBID") != 0) {
-						readFile(file, chunked, filesize, newSocket);
+			} else {
+				buffer[newRead] = '\0';
+				fputs(buffer, stdout);
+			} 
+			int headerEval = parseHeaders(buffer);
+			if (headerEval == -1) {
+				makeHeader(newSocket, "BADREQ", 0);
+				break;
+			} else if (headerEval == 0) {
+				keepAlive = 0;
+			}
+			switch (parseRequest(buffer, filepath, 64)) {
+				case 1: //GET
+					file = fopen(filepath, "rb");
+					if (file == NULL) {
+						makeHeader(newSocket, "DNE", 0);
+					} else {
+						fseek(file, 0, SEEK_END);
+						filesize = ftell(file);
+						int chunked = filesize > MAX_BUFFER;
+						rewind(file);
+						char* extension = getMIMEType(filepath);
+						makeHeader(newSocket, extension, filesize);
+						if (strcmp(extension, "DNE") != 0 && strcmp(extension, "FORBID") != 0) {
+							readFile(file, chunked, filesize, newSocket);
+						}
+						free(extension);
+						fclose(file);
 					}
-					free(extension);
-					fclose(file);
-				}
+					break;
+				default:
 				break;
-			default:
-			break;
+			}
 		}
 		close(newSocket);
 	}

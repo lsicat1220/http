@@ -48,7 +48,6 @@ int parseRequest(char* request, char* filepath, int pathsize) {
 			return -1;
 		} else if (strcmp(pathptr, "/") == 0) {
 			snprintf(filepath, pathsize, "index.html");
-			return 0; //home
 		} else {
 			snprintf(filepath, pathsize, "%s", pathptr[0] == '/' ? pathptr+1 : pathptr);
 		}
@@ -56,6 +55,31 @@ int parseRequest(char* request, char* filepath, int pathsize) {
 	} else {
 		return -2; //unimplemented method
 	}
+}
+int parseHeaders(char* request) {
+	char* charptr = strchr(request, '\n') + 1;
+	char* nextNL;
+	int validhost = 0;
+	int keepAlive = 1;
+	while (charptr != NULL && *charptr != '\r') {
+		nextNL = strchr(charptr, '\n');
+		*nextNL = 0;
+		int linelen = nextNL - charptr;
+		if (strncasecmp(charptr, "host", 4) == 0) {
+			validhost = 1;
+		} else if (strncasecmp(charptr, "connection", 10) == 0) {
+			char* valptr = strcasestr(charptr, "close");
+			if (valptr != NULL) {
+				keepAlive = 0;
+			}
+		}
+		*nextNL = '\n';
+		charptr = strchr(nextNL, '\n') + 1;
+	}
+	if (validhost != 1) {
+		return -1;
+	}
+	return keepAlive;
 }
 char* getMIMEType (char* filename) {
 	char workingDir[64];
@@ -70,7 +94,9 @@ char* getMIMEType (char* filename) {
 	strcpy(namecpy, filename);
 	char* extdot = strrchr(namecpy, '.');
 	if (extdot == NULL) {
-		strncpy(extension, "txt", 9);
+		strncpy(extension, "txt", 4);
+	} else if (strcmp(filename, "index.html") == 0) {
+		strncpy(extension, "HOME", 5);
 	} else {
 		strncpy(extension, extdot+1, 9);
 	}
@@ -80,15 +106,19 @@ void makeHeader (int socket, char* filetype, long size) {
 	char response[MAX_BUFFER];
 	//handling errors
 	if (strcmp(filetype, "DNE") == 0) {
-		snprintf(response, MAX_BUFFER, "HTTP/1.0 404 Not Found\r\n");
+		snprintf(response, MAX_BUFFER, "HTTP/1.1 404 Not Found\r\n");
 		write(socket, response, strlen(response));
 		return;
 	} else if (strcmp(filetype, "FORBID") == 0) {
-		snprintf(response, MAX_BUFFER, "HTTP/1.0 403 Forbidden\r\n");
+		snprintf(response, MAX_BUFFER, "HTTP/1.1 403 Forbidden\r\n");
+		write(socket, response, strlen(response));
+		return;
+	} else if (strcmp(filetype, "BADREQ") == 0) {
+		snprintf(response, MAX_BUFFER, "HTTP/1.1 400 Bad Request");
 		write(socket, response, strlen(response));
 		return;
 	} else {
-		snprintf(response, MAX_BUFFER, "HTTP/1.0 200 OK\r\n");
+		snprintf(response, MAX_BUFFER, "HTTP/1.1 200 OK\r\n");
 	}
 
 	int len = strlen(response);
@@ -96,8 +126,12 @@ void makeHeader (int socket, char* filetype, long size) {
 		snprintf(response + len, MAX_BUFFER - len,
 		   "Server: webserver-c\r\n"
 		   "Content-type: text/html\r\n");
+	} else if (strcmp(filetype, "html") == 0) {
+		snprintf(response + len, MAX_BUFFER - len, "Content-type: text/html\r\n");
 	} else if (strcmp(filetype, "css") == 0) {
 		snprintf(response + len, MAX_BUFFER - len, "Content-type: text/css\r\n");
+	} else if (strcmp(filetype, "ico") == 0) {
+		snprintf(response + len, MAX_BUFFER - len, "image/vnd.microsoft.icon");
 	} else if (0){
 		//insert other filetypes here
 	} 

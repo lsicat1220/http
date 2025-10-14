@@ -9,4 +9,7 @@ int parseRequest(char* request, char* response, int pathsize);
 char* getMIMEType(char* filename);
 
 void makeHeader(int socket, char* filetype, long size);
+
+int parseHeaders(char* request);
+
 #endif
