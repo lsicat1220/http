@@ -6,5 +6,5 @@ Pay no mind to the actual website, it's really just there to test the file servi
 
 ## To do
 - Implement other MIME filetypes
-- Make HTTP 1.1 compliant
+- Implement the handling of multiple connections at once
 - Introduce multithreading?
