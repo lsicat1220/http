@@ -9,6 +9,7 @@
 int readFile(FILE* file, int chunked, int size, int socket) {
 	rewind(file); //making sure file is at the start
 	char buffer[MAX_BUFFER];
+	printf("Start file read (Chunked = %d):\n", chunked);
 	if (chunked == 1) {
 		long remainingBytes = size - ftell(file);
 		while(remainingBytes > 4096) {
@@ -40,6 +41,7 @@ int readFile(FILE* file, int chunked, int size, int socket) {
 int parseRequest(char* request, char* filepath, int pathsize) {
 	char* saveptr; //saves next starting point for strtok_r
 	char* reqptr = strtok_r(request, " ", &saveptr); //strtok_r returns into one pointer
+	printf("Parsing request...\n");
 	if (reqptr == NULL) {
 		return -1; //invalid request
 	} else if (strcmp(reqptr, "GET") == 0) { 
@@ -61,9 +63,11 @@ int parseHeaders(char* request) {
 	char* nextNL;
 	int validhost = 0;
 	int keepAlive = 1;
+	printf("Starting header parse...\n");
 	while (charptr != NULL && *charptr != '\r') {
 		nextNL = strchr(charptr, '\n');
 		*nextNL = 0;
+		//printf("Header read: %s\n", charptr);
 		int linelen = nextNL - charptr;
 		if (strncasecmp(charptr, "host", 4) == 0) {
 			validhost = 1;
@@ -106,15 +110,15 @@ void makeHeader (int socket, char* filetype, long size) {
 	char response[MAX_BUFFER];
 	//handling errors
 	if (strcmp(filetype, "DNE") == 0) {
-		snprintf(response, MAX_BUFFER, "HTTP/1.1 404 Not Found\r\n");
+		snprintf(response, MAX_BUFFER, "HTTP/1.1 404 Not Found\r\n\r\n");
 		write(socket, response, strlen(response));
 		return;
 	} else if (strcmp(filetype, "FORBID") == 0) {
-		snprintf(response, MAX_BUFFER, "HTTP/1.1 403 Forbidden\r\n");
+		snprintf(response, MAX_BUFFER, "HTTP/1.1 403 Forbidden\r\n\r\n");
 		write(socket, response, strlen(response));
 		return;
 	} else if (strcmp(filetype, "BADREQ") == 0) {
-		snprintf(response, MAX_BUFFER, "HTTP/1.1 400 Bad Request");
+		snprintf(response, MAX_BUFFER, "HTTP/1.1 400 Bad Request\r\n\r\n");
 		write(socket, response, strlen(response));
 		return;
 	} else {
@@ -143,6 +147,7 @@ void makeHeader (int socket, char* filetype, long size) {
 			snprintf(response + len, MAX_BUFFER - len, "Transfer-Encoding: chunked\r\n\r\n");
 		}
 	}
+	printf("\n-----RESPONSE:-----\n%s", response);
 	write(socket, response, strlen(response));
 	return;
 }

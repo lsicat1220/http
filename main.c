@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "requests.h"
+#include <sys/time.h>
 
 #define PORT 6767
 #define MAX_BUFFER 8192
@@ -14,6 +15,9 @@ int main() {
 	FILE* file = fopen("index.html", "r");
 	char buffer[MAX_BUFFER];
 	char response[MAX_BUFFER]; 
+	struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 250000; 
 
 	struct sockaddr_in myAddr;
 	int mySocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -36,6 +40,7 @@ int main() {
 		socklen_t newAddrSize = sizeof(newAddr);
 		int keepAlive = 1;
 		int newSocket = accept(mySocket, (struct sockaddr*) &newAddr, &newAddrSize);
+		setsockopt(newSocket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 		char filepath[64];
 		FILE* file;
 		long filesize;
@@ -43,9 +48,10 @@ int main() {
 			perror("error accepting new socket\n");
 			continue;
 		}
-		printf("new connection!\n");
+		printf("\n-----new connection!-----\n");
 		while (keepAlive) {
 			int newRead = read(newSocket, buffer, MAX_BUFFER - 1);
+			char* reqEnd = strstr(buffer, "\r\n\r\n");
 			if (newRead <= 0) {
 				printf("Client disconnected\n");
 				break;
@@ -53,6 +59,16 @@ int main() {
 				buffer[newRead] = '\0';
 				fputs(buffer, stdout);
 			} 
+			while (reqEnd == NULL) {
+				int bufferlen = strlen(buffer);
+				int newRead = read(newSocket, buffer + bufferlen, MAX_BUFFER - 1 - bufferlen);
+				if (newRead > 0) {
+					buffer[newRead] = '\0';
+					fputs(buffer, stdout);
+				}
+				reqEnd = strstr(buffer, "\r\n\r\n");
+			}
+			printf("Request loop start (Bytes read: %d)\n", newRead);
 			int headerEval = parseHeaders(buffer);
 			if (headerEval == -1) {
 				makeHeader(newSocket, "BADREQ", 0);
@@ -82,6 +98,7 @@ int main() {
 				default:
 				break;
 			}
+			printf("Request loop complete.\n\n");
 		}
 		close(newSocket);
 	}
